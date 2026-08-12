@@ -1,6 +1,11 @@
-# The Great Decision — Backend (Supabase)
+# The Great Decision — Backend
 
-Database schema, Row Level Security policies, and Supabase CLI project for The Great Decision. There is no custom application server — Supabase (Postgres + Auth + PostgREST) is the entire backend. The Angular/Ionic app lives in the sibling `FE/` repo.
+Two parts:
+
+- **`supabase/`** — database schema, migrations, and Supabase Auth (sign up / log in / log out / reset password). Supabase CLI project, documented below.
+- **`api/`** — [NestJS API](api/README.md) that owns all data reads/writes and role-based authorization (`superadmin` / `admin` / `member`), connecting directly to the same Postgres database rather than through Supabase's PostgREST + RLS.
+
+The Angular/Ionic app lives in the sibling `FE/` repo.
 
 ## Setup
 
@@ -31,7 +36,7 @@ Six tables, all under `public`:
 
 | Table | Purpose |
 |---|---|
-| `profiles` | One row per user (mirrors `auth.users`), display name + avatar |
+| `profiles` | One row per user (mirrors `auth.users`), display name + avatar + platform-wide `global_role` |
 | `groups` | A group of people deciding where to eat together |
 | `group_members` | Membership + role (`owner` / `admin` / `member`) |
 | `restaurants` | A group's restaurant pool (soft-deleted via `active`, never hard-deleted) |
@@ -48,6 +53,8 @@ Every table has RLS enabled; users can only read/write data for groups they belo
 
 Two triggers do the bookkeeping so client code doesn't have to: `handle_new_user` creates a `profiles` row when someone signs up, and `handle_new_group` adds the creator as `owner` in `group_members` when a group is created.
 
+**Since `api/` was added, RLS is no longer the primary enforcement point.** The NestJS API connects with a role that bypasses RLS and enforces authorization in application code instead; RLS here now mostly matters for the one path that still goes directly through PostgREST — Supabase Auth's own signup trigger, and a user editing their own `display_name`/`avatar_url`. See `api/README.md` for the full explanation, including a gap this surfaced: this Supabase CLI version doesn't auto-grant base table access to `authenticated`/`anon` for new tables, so most RLS policies here were actually unreachable via PostgREST until fixed per-table as needed (`profiles` is fixed; the other five tables are not, since nothing currently needs direct client access to them).
+
 ## Migrations
 
 | File | Contents |
@@ -55,6 +62,8 @@ Two triggers do the bookkeeping so client code doesn't have to: `handle_new_user
 | `20260812093000_initial_schema.sql` | Tables, foreign keys, indexes |
 | `20260812093100_functions_and_triggers.sql` | RLS helper functions, signup/group-creation triggers |
 | `20260812093200_rls_policies.sql` | RLS policies for all six tables |
+| `20260812140000_profiles_global_role.sql` | Adds `profiles.global_role` (superadmin/admin/member) + column-level UPDATE grant so only `display_name`/`avatar_url` are self-editable, not the role itself |
+| `20260812141500_profiles_grant_select.sql` | Grants base `SELECT` on `profiles` to `authenticated` (see RLS note above) |
 
 Add new migrations with `npx supabase migration new <name>` rather than editing existing ones once they've shipped to a real environment.
 

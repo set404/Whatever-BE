@@ -1,0 +1,119 @@
+// Hand-authored, not auto-pulled: `prisma db pull` drags in every internal GoTrue
+// table (sessions, MFA, SSO, OAuth...) from the `auth` schema, which we don't want
+// to depend on. `auth.users` below is trimmed to the two columns we actually read.
+// BE/supabase/migrations is the single source of truth for schema — after any
+// change there, update this file to match by hand; do not run `prisma db pull` or
+// `prisma migrate` against it.
+
+// Using the classic CJS-native generator, not the newer "prisma-client" one: the
+// latter emits `import.meta.url` even in CommonJS output, which is a hard
+// SyntaxError under Nest's default CJS build. This generator has no such issue.
+// No custom `output`: it generates into node_modules/.prisma/client, resolved at
+// runtime via the `@prisma/client` package (already a dependency) — that indirection
+// is what lets `dist/` resolve it identically to `src/`, with nothing for our own
+// build to copy or compile.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["public", "auth"]
+}
+
+/// Supabase Auth's user table. Read-only from this app — GoTrue owns writes to it.
+model AuthUser {
+  id    String  @id @db.Uuid
+  email String?
+
+  profile Profile?
+
+  @@map("users")
+  @@schema("auth")
+}
+
+model Profile {
+  id          String   @id @db.Uuid
+  displayName String?  @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  globalRole  String   @default("member") @map("global_role")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  authUser AuthUser @relation(fields: [id], references: [id])
+
+  @@map("profiles")
+  @@schema("public")
+}
+
+model Group {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  members     GroupMember[]
+  restaurants Restaurant[]
+  decisions   Decision[]
+  invitations Invitation[]
+
+  @@map("groups")
+  @@schema("public")
+}
+
+model GroupMember {
+  id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId  String   @map("group_id") @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
+  role     String   @default("member")
+  joinedAt DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+  @@schema("public")
+}
+
+model Restaurant {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId   String   @map("group_id") @db.Uuid
+  name      String
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  active    Boolean  @default(true)
+
+  group     Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  decisions Decision[]
+
+  @@map("restaurants")
+  @@schema("public")
+}
+
+model Decision {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId      String   @map("group_id") @db.Uuid
+  restaurantId String   @map("restaurant_id") @db.Uuid
+  decisionDate DateTime @map("decision_date") @db.Date
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group      Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@unique([groupId, decisionDate])
+  @@map("decisions")
+  @@schema("public")
+}
+
+model Invitation {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  groupId   String    @map("group_id") @db.Uuid
+  code      String    @unique
+  createdBy String    @map("created_by") @db.Uuid
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@map("invitations")
+  @@schema("public")
+}
