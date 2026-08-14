@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -19,7 +23,9 @@ export interface DecisionResult {
 // not a timestamp.
 function todayDateOnly(): Date {
   const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
 }
 
 // No restaurant should be picked more than once within any 4 consecutive days —
@@ -30,7 +36,12 @@ function toResult(decision: {
   id: string;
   decisionDate: Date;
   createdAt: Date;
-  restaurant: { id: string; name: string; imageUrl: string | null; websiteUrl: string | null };
+  restaurant: {
+    id: string;
+    name: string;
+    imageUrl: string | null;
+    websiteUrl: string | null;
+  };
 }): DecisionResult {
   return {
     id: decision.id,
@@ -44,7 +55,10 @@ function toResult(decision: {
 export class DecisionsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private async requireMembership(groupId: string, userId: string): Promise<void> {
+  private async requireMembership(
+    groupId: string,
+    userId: string,
+  ): Promise<void> {
     const membership = await this.prisma.groupMember.findUnique({
       where: { groupId_userId: { groupId, userId } },
     });
@@ -74,7 +88,9 @@ export class DecisionsService {
       orderBy: { decisionDate: 'desc' },
     });
 
-    const recentlyPickedIds = new Set(recentDecisions.map((d) => d.restaurantId));
+    const recentlyPickedIds = new Set(
+      recentDecisions.map((d) => d.restaurantId),
+    );
     const eligible = restaurants.filter((r) => !recentlyPickedIds.has(r.id));
     if (eligible.length > 0) {
       return eligible[Math.floor(Math.random() * eligible.length)];
@@ -95,7 +111,10 @@ export class DecisionsService {
     })[0];
   }
 
-  async getOrPickToday(groupId: string, userId: string): Promise<DecisionResult> {
+  async getOrPickToday(
+    groupId: string,
+    userId: string,
+  ): Promise<DecisionResult> {
     await this.requireMembership(groupId, userId);
 
     const decisionDate = todayDateOnly();
@@ -112,7 +131,9 @@ export class DecisionsService {
       where: { groupId, active: true },
     });
     if (restaurants.length === 0) {
-      throw new BadRequestException('Add a restaurant before getting a decision');
+      throw new BadRequestException(
+        'Add a restaurant before getting a decision',
+      );
     }
 
     const pick = await this.choose(groupId, decisionDate, restaurants);
@@ -127,7 +148,10 @@ export class DecisionsService {
       // Two members hitting "today's decision" at the same moment can both pass
       // the findUnique check above and race on the create; the loser just reads
       // back the winner's row rather than erroring.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
         const winner = await this.prisma.decision.findUniqueOrThrow({
           where: { groupId_decisionDate: { groupId, decisionDate } },
           include: { restaurant: true },

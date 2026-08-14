@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/authenticated-user';
 import { CreateRestaurantDto } from './dto/create-restaurant.dto';
@@ -10,7 +18,10 @@ export class RestaurantsController {
   constructor(private readonly restaurantsService: RestaurantsService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthenticatedUser, @Param('groupId') groupId: string) {
+  list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId') groupId: string,
+  ) {
     return this.restaurantsService.listForGroup(groupId, user.id);
   }
 

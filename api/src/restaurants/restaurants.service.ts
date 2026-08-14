@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface RestaurantListItem {
@@ -37,7 +41,10 @@ export class RestaurantsService {
     return membership;
   }
 
-  async listForGroup(groupId: string, userId: string): Promise<RestaurantListItem[]> {
+  async listForGroup(
+    groupId: string,
+    userId: string,
+  ): Promise<RestaurantListItem[]> {
     await this.requireMembership(groupId, userId);
 
     const restaurants = await this.prisma.restaurant.findMany({
@@ -84,7 +91,11 @@ export class RestaurantsService {
 
   // Shared by update/remove: loads the restaurant and checks that the caller is
   // either the one who added it, or a group owner/admin.
-  private async requireEditableRestaurant(groupId: string, userId: string, restaurantId: string) {
+  private async requireEditableRestaurant(
+    groupId: string,
+    userId: string,
+    restaurantId: string,
+  ) {
     const membership = await this.requireMembership(groupId, userId);
 
     const restaurant = await this.prisma.restaurant.findUnique({
@@ -94,7 +105,8 @@ export class RestaurantsService {
       throw new NotFoundException('No restaurant with that id in this group');
     }
 
-    const canManageGroup = membership.role === 'owner' || membership.role === 'admin';
+    const canManageGroup =
+      membership.role === 'owner' || membership.role === 'admin';
     if (restaurant.createdBy !== userId && !canManageGroup) {
       throw new ForbiddenException(
         'Only the person who added this, or a group owner/admin, can change it',
@@ -133,7 +145,11 @@ export class RestaurantsService {
 
   // Soft-delete only — restaurants.active is designed to never be hard-deleted
   // (see BE/README.md), since past decisions reference them by id.
-  async remove(groupId: string, userId: string, restaurantId: string): Promise<void> {
+  async remove(
+    groupId: string,
+    userId: string,
+    restaurantId: string,
+  ): Promise<void> {
     await this.requireEditableRestaurant(groupId, userId, restaurantId);
 
     await this.prisma.restaurant.update({

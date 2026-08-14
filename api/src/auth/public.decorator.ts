@@ -2,5 +2,5 @@ import { SetMetadata } from '@nestjs/common';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 
-/** Marks a route as exempt from the global SupabaseAuthGuard (e.g. health checks). */
+/** Marks a route as exempt from the global JwtAuthGuard (e.g. health checks, /auth/*). */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);

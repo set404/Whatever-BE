@@ -1,6 +1,6 @@
 import { GlobalRole } from '../roles/global-role.enum';
 
-/** Attached to the request by SupabaseAuthGuard after verifying the JWT and loading the profile. */
+/** Attached to the request by JwtAuthGuard after verifying the access token and loading the user. */
 export interface AuthenticatedUser {
   id: string;
   email: string | null;

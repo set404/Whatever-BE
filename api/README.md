@@ -1,38 +1,56 @@
 # The Great Decision — API
 
-NestJS API layer for The Great Decision. Supabase Auth still handles sign up / log in / log out / reset password (see `../../FE`), but this app owns all data reads/writes and role-based authorization — it connects to the same Postgres database directly (via Prisma) and bypasses Row Level Security, enforcing access control in application code instead.
-
-## Why a separate API in front of Supabase?
-
-The app needs a platform-wide role system (`superadmin` / `admin` / `member`, distinct from the per-group `owner` / `admin` / `member` role already in `group_members`) with real authorization logic — e.g. only a superadmin can change someone's role. That's naturally expressed as application code with typed guards and services, not as SQL RLS policies. Supabase Auth is kept for what it's good at (session management, password reset emails, social login later); this API is kept for what it's good at (business logic, authorization, typed queries).
+Self-contained NestJS API for The Great Decision — no external auth, database, or storage provider. It owns account creation and login, all data reads/writes, and role-based authorization (`superadmin` / `admin` / `member`).
 
 ## Stack
 
 - NestJS 11
-- Prisma (classic `prisma-client-js` generator + `@prisma/adapter-pg`, not the newer ESM-only `prisma-client` generator — see the comment in `prisma/schema.prisma` for why)
-- `jose` for verifying Supabase's JWTs against its JWKS endpoint (Supabase signs access tokens asymmetrically — there's no shared secret to configure)
+- Prisma (classic `prisma-client-js` generator + `@prisma/adapter-pg`, not the newer ESM-only `prisma-client` generator — see the comment in `prisma/schema.prisma` for why), against any Postgres (Neon recommended for a free hosted DB)
+- `jose` for signing/verifying its own JWTs (`HS256`, local secret) and `bcrypt` for password hashing — see `src/auth/`
+- `@aws-sdk/client-s3` for presigning uploads to Cloudflare R2 — see `src/uploads/`
 
 ## Setup
 
 ```bash
 npm install
-cp .env.example .env   # then fill in from `supabase status` (run from BE/)
+cp .env.example .env   # fill in DATABASE_URL, JWT_SECRET, etc. — see below
+npx prisma migrate dev
 npx prisma generate
 ```
 
-`DATABASE_URL` connects as the Postgres superuser (bypasses RLS by design — this app is the authorization boundary, not RLS) and `SUPABASE_URL` is used to build the JWKS endpoint for token verification.
+### Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Postgres connection string (e.g. from Neon) |
+| `JWT_SECRET` | Signs/verifies access tokens (`openssl rand -hex 32`) |
+| `FRONTEND_URL` | Used to build the link in password-reset emails, and as the allowed CORS origin |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Sends password-reset emails via [Resend](https://resend.com)'s free tier. Leave `RESEND_API_KEY` unset locally to have the reset link logged to the console instead |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` / `R2_PUBLIC_URL` | Cloudflare R2 bucket (S3-compatible) for restaurant image uploads. Create the bucket manually in the Cloudflare dashboard with public read access enabled |
+| `BOOTSTRAP_SUPERADMIN_EMAIL` | Used only by `npm run seed:superadmin`, see below |
 
 ### Schema
 
-`prisma/schema.prisma` is **hand-authored, not introspected** (`prisma db pull` drags in every internal Supabase Auth table — sessions, MFA, SSO, OAuth — which we don't want a dependency on). `BE/supabase/migrations` is the single source of truth for schema; after changing it there, update `schema.prisma` to match by hand. Don't run `prisma migrate` or `prisma db pull` against this schema.
+`prisma/schema.prisma` is hand-authored and is the single source of truth — `prisma/migrations/` is generated from it via `npx prisma migrate dev --name <description>`, run whenever the schema changes.
 
 ## Running
 
 ```bash
-npm run start:dev     # requires `supabase start` running in BE/ first
+npm run start:dev
 ```
 
-## Roles
+## Auth
+
+All routes require a valid access token unless marked `@Public()` (see `src/auth/jwt-auth.guard.ts`, applied globally in `AppModule`).
+
+- `POST /auth/signup` — `{ email, password, displayName }` → creates the account, returns `{ user, accessToken }`, sets an httpOnly refresh-token cookie
+- `POST /auth/login` — `{ email, password }` → same response shape
+- `POST /auth/refresh` — reads the refresh cookie, rotates it, returns a new `{ accessToken }`
+- `POST /auth/logout` — revokes the refresh token and clears the cookie
+- `POST /auth/request-password-reset` — `{ email }` → always 200; emails a reset link if the account exists
+- `POST /auth/reset-password` — `{ token, newPassword }` → consumes the token and revokes all of that user's sessions
+
+Access tokens are short-lived (15 min); refresh tokens are opaque, stored hashed in `refresh_tokens`, and rotated on every use. `/auth/*` responses set the refresh token as an `httpOnly`, `SameSite=None; Secure` cookie in production (`SameSite=Lax`, non-`Secure` in local dev over http) — the FE must send requests with credentials included.
 
 - `GET /me` — any authenticated user, returns your own profile + role
 - `GET /admin/users` — requires `admin` or `superadmin`, lists all users and their roles
@@ -47,16 +65,16 @@ npm run seed:superadmin
 
 ### How authorization works
 
-1. `SupabaseAuthGuard` runs globally (every route requires a valid Supabase session unless marked `@Public()`). It verifies the bearer token against Supabase's JWKS endpoint, looks up the user's `profiles` row, and attaches `{ id, email, displayName, globalRole }` to the request.
+1. `JwtAuthGuard` runs globally (every route requires a valid access token unless marked `@Public()`). It verifies the bearer token locally against `JWT_SECRET` and loads the user's current `global_role` from the database, attaching `{ id, email, displayName, globalRole }` to the request.
 2. `RolesGuard` + `@Roles(GlobalRole.Admin)` (etc.) check that against a route's required role. Roles are ranked (`superadmin > admin > member`), so `@Roles(Admin)` also admits a superadmin.
 
-## A note on Row Level Security
+## Restaurant images
 
-`BE/supabase/migrations` still defines RLS policies for every table (from before this API existed). Since this app bypasses RLS entirely, those policies are no longer the enforcement point for anything this API handles — they're dormant unless something queries Postgres directly through PostgREST again. While building this, we also discovered the local Supabase CLI's newer default doesn't auto-grant base table access to `authenticated`/`anon` at all (only `profiles` has been fixed, since it's the one table this API's design still expects a legitimate direct-client write path for — self-editing your own `display_name`/`avatar_url`). The other five tables (`groups`, `group_members`, `restaurants`, `decisions`, `invitations`) are effectively unreachable via PostgREST right now; grant them base privileges too if a future feature needs direct client access to one of those instead of going through this API.
+`POST /uploads/restaurant-image` (authenticated) — `{ groupId, contentType }` → returns `{ uploadUrl, publicUrl }`. The FE `PUT`s the file directly to `uploadUrl` (a short-lived presigned R2 URL) and stores `publicUrl` as the restaurant's `image_url`. The API never handles the file bytes.
 
 ## Testing
 
 ```bash
 npm test        # unit tests — no external services needed
-npm run test:e2e   # requires `supabase start` running (PrismaService connects to the real local DB on boot)
+npm run test:e2e   # requires a real DATABASE_URL (PrismaService connects on boot)
 ```

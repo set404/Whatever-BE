@@ -4,8 +4,8 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
-// Requires a live local Supabase stack (`supabase start` in BE/) — PrismaService
-// connects to the real local Postgres on module init, same as running the app.
+// Requires a real DATABASE_URL in the environment — PrismaService connects to
+// the real Postgres on module init, same as running the app.
 describe('AppModule (e2e)', () => {
   let app: INestApplication<App>;
 

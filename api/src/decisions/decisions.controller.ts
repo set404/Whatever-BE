@@ -8,12 +8,18 @@ export class DecisionsController {
   constructor(private readonly decisionsService: DecisionsService) {}
 
   @Post('today')
-  today(@CurrentUser() user: AuthenticatedUser, @Param('groupId') groupId: string) {
+  today(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId') groupId: string,
+  ) {
     return this.decisionsService.getOrPickToday(groupId, user.id);
   }
 
   @Get()
-  history(@CurrentUser() user: AuthenticatedUser, @Param('groupId') groupId: string) {
+  history(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('groupId') groupId: string,
+  ) {
     return this.decisionsService.history(groupId, user.id);
   }
 }

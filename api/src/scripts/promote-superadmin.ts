@@ -23,20 +23,20 @@ async function main() {
     adapter: new PrismaPg({ connectionString: databaseUrl }),
   });
   try {
-    const authUser = await prisma.authUser.findFirst({ where: { email } });
-    if (!authUser) {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (!existing) {
       console.error(
         `No signed-up user found with email ${email}. Sign up through the app first.`,
       );
       process.exit(1);
     }
 
-    const profile = await prisma.profile.update({
-      where: { id: authUser.id },
+    const user = await prisma.user.update({
+      where: { id: existing.id },
       data: { globalRole: 'superadmin' },
     });
 
-    console.log(`Promoted ${email} (${profile.id}) to superadmin.`);
+    console.log(`Promoted ${email} (${user.id}) to superadmin.`);
   } finally {
     await prisma.$disconnect();
   }

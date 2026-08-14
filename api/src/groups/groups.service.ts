@@ -38,10 +38,16 @@ export class GroupsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(userId: string, name: string): Promise<GroupListItem> {
-    // `on_group_created` (see BE/supabase/migrations) adds the creator as 'owner'
-    // in group_members as soon as this INSERT commits — no separate write needed.
-    const group = await this.prisma.group.create({
-      data: { name, createdBy: userId },
+    // Used to be a DB trigger (Supabase-era); ported here now that Prisma Migrate
+    // owns the schema and there's no hand-written SQL trigger layer anymore.
+    const group = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.group.create({
+        data: { name, createdBy: userId },
+      });
+      await tx.groupMember.create({
+        data: { groupId: created.id, userId, role: 'owner' },
+      });
+      return created;
     });
 
     return {
@@ -56,7 +62,9 @@ export class GroupsService {
   async listForUser(userId: string): Promise<GroupListItem[]> {
     const memberships = await this.prisma.groupMember.findMany({
       where: { userId },
-      include: { group: { include: { _count: { select: { members: true } } } } },
+      include: {
+        group: { include: { _count: { select: { members: true } } } },
+      },
       orderBy: { joinedAt: 'asc' },
     });
 
@@ -72,7 +80,9 @@ export class GroupsService {
   async getOne(userId: string, groupId: string): Promise<GroupListItem> {
     const membership = await this.prisma.groupMember.findUnique({
       where: { groupId_userId: { groupId, userId } },
-      include: { group: { include: { _count: { select: { members: true } } } } },
+      include: {
+        group: { include: { _count: { select: { members: true } } } },
+      },
     });
     if (!membership) {
       throw new NotFoundException('No group with that id');
@@ -94,8 +104,13 @@ export class GroupsService {
     const membership = await this.prisma.groupMember.findUnique({
       where: { groupId_userId: { groupId, userId } },
     });
-    if (!membership || (membership.role !== 'owner' && membership.role !== 'admin')) {
-      throw new ForbiddenException('Only a group owner or admin can invite members');
+    if (
+      !membership ||
+      (membership.role !== 'owner' && membership.role !== 'admin')
+    ) {
+      throw new ForbiddenException(
+        'Only a group owner or admin can invite members',
+      );
     }
 
     const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
@@ -116,10 +131,15 @@ export class GroupsService {
   async joinByCode(userId: string, code: string): Promise<GroupListItem> {
     const invitation = await this.prisma.invitation.findUnique({
       where: { code: code.toUpperCase() },
-      include: { group: { include: { _count: { select: { members: true } } } } },
+      include: {
+        group: { include: { _count: { select: { members: true } } } },
+      },
     });
 
-    if (!invitation || (invitation.expiresAt && invitation.expiresAt < new Date())) {
+    if (
+      !invitation ||
+      (invitation.expiresAt && invitation.expiresAt < new Date())
+    ) {
       throw new NotFoundException('Invalid or expired invite code');
     }
 

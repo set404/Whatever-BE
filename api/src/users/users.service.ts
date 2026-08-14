@@ -15,17 +15,16 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listAll(): Promise<AdminUserListItem[]> {
-    const profiles = await this.prisma.profile.findMany({
-      include: { authUser: true },
+    const users = await this.prisma.user.findMany({
       orderBy: { createdAt: 'asc' },
     });
 
-    return profiles.map((profile) => ({
-      id: profile.id,
-      email: profile.authUser.email,
-      displayName: profile.displayName,
-      globalRole: profile.globalRole as GlobalRole,
-      createdAt: profile.createdAt,
+    return users.map((user) => ({
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      globalRole: user.globalRole as GlobalRole,
+      createdAt: user.createdAt,
     }));
   }
 
@@ -33,22 +32,21 @@ export class UsersService {
     userId: string,
     role: GlobalRole,
   ): Promise<AdminUserListItem> {
-    const existing = await this.prisma.profile.findUnique({
+    const existing = await this.prisma.user.findUnique({
       where: { id: userId },
     });
     if (!existing) {
       throw new NotFoundException('No user with that id');
     }
 
-    const updated = await this.prisma.profile.update({
+    const updated = await this.prisma.user.update({
       where: { id: userId },
       data: { globalRole: role },
-      include: { authUser: true },
     });
 
     return {
       id: updated.id,
-      email: updated.authUser.email,
+      email: updated.email,
       displayName: updated.displayName,
       globalRole: updated.globalRole as GlobalRole,
       createdAt: updated.createdAt,

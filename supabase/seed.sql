@@ -1,5 +1,0 @@
--- Optional local-dev seed data for `supabase start` / `supabase db reset`.
--- Left empty on purpose: profiles/groups all depend on real auth.users rows
--- (created via sign-up), so there is nothing meaningful to seed until a user
--- exists locally. Sign up through the app against your local Supabase instance,
--- then add sample groups/restaurants here if you want repeatable local fixtures.

@@ -9,7 +9,7 @@ import { AuthenticatedUser } from '../auth/authenticated-user';
 import { GlobalRole, satisfiesRole } from './global-role.enum';
 import { ROLES_KEY } from './roles.decorator';
 
-/** Runs after SupabaseAuthGuard has attached request.user. No @Roles() on a route means any authenticated user may access it. */
+/** Runs after JwtAuthGuard has attached request.user. No @Roles() on a route means any authenticated user may access it. */
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
