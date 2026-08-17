@@ -1,4 +1,4 @@
-# The Great Decision — Backend
+# Whatever — Backend
 
 A single self-contained NestJS API (`api/`) — no external auth or database provider. It owns:
 

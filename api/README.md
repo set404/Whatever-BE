@@ -1,6 +1,6 @@
-# The Great Decision — API
+# Whatever — API
 
-Self-contained NestJS API for The Great Decision — no external auth, database, or storage provider. It owns account creation and login, all data reads/writes, and role-based authorization (`superadmin` / `admin` / `member`).
+Self-contained NestJS API for Whatever — no external auth, database, or storage provider. It owns account creation and login, all data reads/writes, and role-based authorization (`superadmin` / `admin` / `member`).
 
 ## Stack
 
