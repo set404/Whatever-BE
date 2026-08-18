@@ -1,6 +1,10 @@
+import { resolve4 } from 'node:dns/promises';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import nodemailer, { Transporter } from 'nodemailer';
+import nodemailer from 'nodemailer';
+
+const SMTP_HOST = 'smtp.gmail.com';
+const SMTP_PORT = 465;
 
 /** Nodemailer's defaults (2 min connect / 30s greeting) make a blocked or flaky
  *  SMTP path hang for minutes before failing — fail fast instead. */
@@ -17,7 +21,6 @@ const SMTP_SOCKET_TIMEOUT_MS = 15_000;
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private transporter?: Transporter;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -31,14 +34,34 @@ export class MailService {
       return;
     }
 
-    this.transporter ??= nodemailer.createTransport({
-      service: 'gmail',
+    // Some hosts (Render included) report IPv6 as available but have no
+    // outbound IPv6 route, so nodemailer's own dual-stack resolution picks
+    // smtp.gmail.com's AAAA record and the connection dies with ENETUNREACH.
+    // Resolve the A record ourselves and connect to that literal IPv4
+    // address; `tls.servername` keeps SNI/cert validation against the real
+    // hostname.
+    let host: string = SMTP_HOST;
+    try {
+      const addresses = await resolve4(SMTP_HOST);
+      if (addresses.length > 0) {
+        host = addresses[0];
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Could not resolve an IPv4 address for ${SMTP_HOST}, falling back to hostname resolution: ${(error as Error).message}`,
+      );
+    }
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port: SMTP_PORT,
+      secure: true,
       auth: { user, pass },
+      tls: { servername: SMTP_HOST },
       connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
       greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
       socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
     });
-    const transporter = this.transporter;
 
     try {
       await transporter.sendMail({
