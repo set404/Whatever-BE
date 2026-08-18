@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import nodemailer from 'nodemailer';
+import nodemailer, { Transporter } from 'nodemailer';
+
+/** Nodemailer's defaults (2 min connect / 30s greeting) make a blocked or flaky
+ *  SMTP path hang for minutes before failing — fail fast instead. */
+const SMTP_CONNECTION_TIMEOUT_MS = 10_000;
+const SMTP_GREETING_TIMEOUT_MS = 10_000;
+const SMTP_SOCKET_TIMEOUT_MS = 15_000;
 
 /**
  * Sends via Gmail SMTP (an App Password on a Gmail account — no domain
@@ -11,6 +17,7 @@ import nodemailer from 'nodemailer';
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
+  private transporter?: Transporter;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -24,10 +31,14 @@ export class MailService {
       return;
     }
 
-    const transporter = nodemailer.createTransport({
+    this.transporter ??= nodemailer.createTransport({
       service: 'gmail',
       auth: { user, pass },
+      connectionTimeout: SMTP_CONNECTION_TIMEOUT_MS,
+      greetingTimeout: SMTP_GREETING_TIMEOUT_MS,
+      socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
     });
+    const transporter = this.transporter;
 
     try {
       await transporter.sendMail({

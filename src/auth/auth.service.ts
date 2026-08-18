@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'crypto';
 import {
   ConflictException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -37,6 +38,7 @@ function hashToken(token: string): string {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly secret: Uint8Array;
 
   constructor(
@@ -117,7 +119,13 @@ export class AuthService {
 
     const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
     const link = `${frontendUrl}/auth/reset-password-confirm?token=${token}`;
-    await this.mail.sendPasswordResetEmail(user.email, link);
+    try {
+      await this.mail.sendPasswordResetEmail(user.email, link);
+    } catch (error) {
+      this.logger.error(
+        `Password reset email failed for user ${user.id}: ${(error as Error).message}`,
+      );
+    }
   }
 
   /** Consumes the reset token and revokes every existing session (refresh token) for the user. */
