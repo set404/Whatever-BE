@@ -15,10 +15,20 @@ async function bootstrap() {
   app.set('trust proxy', 1);
 
   app.use(cookieParser());
+  // FRONTEND_URL may include a path (e.g. GitHub Pages project sites are
+  // served under /<repo>/ — needed as-is when building password-reset
+  // links), but CORS only ever matches on origin, so derive that separately.
   // credentials: true is required for the refresh-token cookie to be
   // set/sent cross-origin (FE and BE are on different domains once deployed).
+  const webFrontendOrigin = new URL(
+    config.getOrThrow<string>('FRONTEND_URL'),
+  ).origin;
   app.enableCors({
-    origin: config.getOrThrow<string>('FRONTEND_URL'),
+    origin: [
+      webFrontendOrigin,
+      'http://localhost:4200', // local `ng serve`
+      'https://localhost', // Capacitor's Android WebView (default androidScheme/hostname)
+    ],
     credentials: true,
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
