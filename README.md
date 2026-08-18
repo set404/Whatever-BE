@@ -25,7 +25,7 @@ npx prisma generate
 | `DATABASE_URL` | Postgres connection string (e.g. from Neon) |
 | `JWT_SECRET` | Signs/verifies access tokens (`openssl rand -hex 32`) |
 | `FRONTEND_URL` | Used to build the link in password-reset emails, and as the allowed CORS origin |
-| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Sends password-reset emails via [Resend](https://resend.com)'s free tier. Leave `RESEND_API_KEY` unset locally to have the reset link logged to the console instead |
+| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | Sends password-reset emails via Gmail SMTP — a Gmail account with 2FA and an [App Password](https://myaccount.google.com/apppasswords). Leave unset locally to have the reset link logged to the console instead |
 | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` / `R2_PUBLIC_URL` | Cloudflare R2 bucket (S3-compatible) for restaurant image uploads. Create the bucket manually in the Cloudflare dashboard with public read access enabled |
 | `BOOTSTRAP_SUPERADMIN_EMAIL` | Used only by `npm run seed:superadmin`, see below |
 
