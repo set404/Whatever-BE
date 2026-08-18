@@ -7,7 +7,7 @@ Self-contained NestJS API for Whatever — no external auth, database, or storag
 - NestJS 11
 - Prisma (classic `prisma-client-js` generator + `@prisma/adapter-pg`, not the newer ESM-only `prisma-client` generator — see the comment in `prisma/schema.prisma` for why), against any Postgres (Neon recommended for a free hosted DB)
 - `jose` for signing/verifying its own JWTs (`HS256`, local secret) and `bcrypt` for password hashing — see `src/auth/`
-- `@aws-sdk/client-s3` for presigning uploads to Cloudflare R2 — see `src/uploads/`
+- Restaurant photos are stored directly in Postgres (no external storage provider) — see `src/uploads/`
 
 ## Setup
 
@@ -26,7 +26,6 @@ npx prisma generate
 | `JWT_SECRET` | Signs/verifies access tokens (`openssl rand -hex 32`) |
 | `FRONTEND_URL` | Used to build the link in password-reset emails, and as the allowed CORS origin |
 | `GMAIL_USER` / `GMAIL_APP_PASSWORD` | Sends password-reset emails via Gmail SMTP — a Gmail account with 2FA and an [App Password](https://myaccount.google.com/apppasswords). Leave unset locally to have the reset link logged to the console instead |
-| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` / `R2_PUBLIC_URL` | Cloudflare R2 bucket (S3-compatible) for restaurant image uploads. Create the bucket manually in the Cloudflare dashboard with public read access enabled |
 | `BOOTSTRAP_SUPERADMIN_EMAIL` | Used only by `npm run seed:superadmin`, see below |
 
 ### Schema
@@ -70,7 +69,9 @@ npm run seed:superadmin
 
 ## Restaurant images
 
-`POST /uploads/restaurant-image` (authenticated) — `{ groupId, contentType }` → returns `{ uploadUrl, publicUrl }`. The FE `PUT`s the file directly to `uploadUrl` (a short-lived presigned R2 URL) and stores `publicUrl` as the restaurant's `image_url`. The API never handles the file bytes.
+`POST /uploads/restaurant-image` (authenticated, `multipart/form-data` with a `file` field) — stores the image bytes in the `images` table and returns `{ imageUrl }`, an absolute URL back to this API. The FE stores that as the restaurant's `image_url`.
+
+`GET /uploads/images/:id` (`@Public()`) — streams the stored bytes back out with the right `Content-Type`, so it works directly as an `<img src>`.
 
 ## Testing
 

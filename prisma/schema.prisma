@@ -112,6 +112,17 @@ model Decision {
   @@map("decisions")
 }
 
+/// Restaurant photos, stored directly in Postgres rather than object storage
+/// (no external storage provider wired up) — served back via GET /uploads/images/:id.
+model Image {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  data        Bytes
+  contentType String   @map("content_type")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("images")
+}
+
 model Invitation {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   groupId   String    @map("group_id") @db.Uuid
