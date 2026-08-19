@@ -29,6 +29,11 @@ export class GroupsController {
     return this.groupsService.getOne(user.id, id);
   }
 
+  @Get(':id/members')
+  getMembers(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.groupsService.getMembers(user.id, id);
+  }
+
   @Post(':id/invitations')
   invite(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.groupsService.createInvitation(user.id, id);

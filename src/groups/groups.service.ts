@@ -19,6 +19,21 @@ export interface InvitationResult {
   expiresAt: Date;
 }
 
+export interface GroupMemberItem {
+  userId: string;
+  displayName: string | null;
+  email: string;
+  avatarUrl: string | null;
+  role: string;
+  joinedAt: Date;
+}
+
+// Owner first, then admin, then everyone else — ties broken by join order.
+const ROLE_RANK: Record<string, number> = { owner: 0, admin: 1 };
+function roleRank(role: string): number {
+  return ROLE_RANK[role] ?? 2;
+}
+
 // Excludes visually ambiguous characters (0/O, 1/I/L) since codes are meant to be
 // read off one screen and typed into another.
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -95,6 +110,49 @@ export class GroupsService {
       memberCount: membership.group._count.members,
       createdAt: membership.group.createdAt,
     };
+  }
+
+  async getMembers(
+    userId: string,
+    groupId: string,
+  ): Promise<GroupMemberItem[]> {
+    const membership = await this.prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+    });
+    if (!membership) {
+      throw new NotFoundException('No group with that id');
+    }
+
+    const members = await this.prisma.groupMember.findMany({
+      where: { groupId },
+    });
+
+    // No Prisma relation between GroupMember and User (see schema.prisma), so
+    // this is a second query rather than an `include` — fine at group-roster
+    // scale.
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: members.map((member) => member.userId) } },
+      select: { id: true, displayName: true, email: true, avatarUrl: true },
+    });
+    const usersById = new Map(users.map((user) => [user.id, user]));
+
+    return members
+      .map((member) => {
+        const user = usersById.get(member.userId);
+        return {
+          userId: member.userId,
+          displayName: user?.displayName ?? null,
+          email: user?.email ?? '',
+          avatarUrl: user?.avatarUrl ?? null,
+          role: member.role,
+          joinedAt: member.joinedAt,
+        };
+      })
+      .sort(
+        (a, b) =>
+          roleRank(a.role) - roleRank(b.role) ||
+          a.joinedAt.getTime() - b.joinedAt.getTime(),
+      );
   }
 
   async createInvitation(
