@@ -127,6 +127,9 @@ model Invitation {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   groupId   String    @map("group_id") @db.Uuid
   code      String    @unique
+  /// Set only for email invites (createInvitation's open/shareable codes leave this
+  /// null) — lowercased, and joinByCode requires the joining user's email to match.
+  email     String?
   createdBy String    @map("created_by") @db.Uuid
   expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)

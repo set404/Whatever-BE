@@ -7,6 +7,6 @@ import { MailService } from './mail.service';
 @Module({
   controllers: [AuthController],
   providers: [AuthService, MailService, JwtAuthGuard],
-  exports: [AuthService, JwtAuthGuard],
+  exports: [AuthService, MailService, JwtAuthGuard],
 })
 export class AuthModule {}

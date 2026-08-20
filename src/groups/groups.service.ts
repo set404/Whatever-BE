@@ -4,6 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { MailService } from '../auth/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface GroupListItem {
@@ -17,6 +19,17 @@ export interface GroupListItem {
 export interface InvitationResult {
   code: string;
   expiresAt: Date;
+}
+
+export interface EmailInvitationResult {
+  email: string;
+  expiresAt: Date;
+}
+
+export interface InvitationInfo {
+  groupId: string;
+  groupName: string;
+  email: string | null;
 }
 
 export interface GroupMemberItem {
@@ -50,7 +63,11 @@ function generateInviteCode(): string {
 
 @Injectable()
 export class GroupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+    private readonly config: ConfigService,
+  ) {}
 
   async create(userId: string, name: string): Promise<GroupListItem> {
     // Used to be a DB trigger (Supabase-era); ported here now that Prisma Migrate
@@ -186,7 +203,87 @@ export class GroupsService {
     return { code: invitation.code, expiresAt: invitation.expiresAt! };
   }
 
-  async joinByCode(userId: string, code: string): Promise<GroupListItem> {
+  async inviteByEmail(
+    userId: string,
+    groupId: string,
+    email: string,
+  ): Promise<EmailInvitationResult> {
+    const membership = await this.prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+      include: { group: true },
+    });
+    if (
+      !membership ||
+      (membership.role !== 'owner' && membership.role !== 'admin')
+    ) {
+      throw new ForbiddenException(
+        'Only a group owner or admin can invite members',
+      );
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const invitedUser = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+    if (invitedUser) {
+      const existingMembership = await this.prisma.groupMember.findUnique({
+        where: { groupId_userId: { groupId, userId: invitedUser.id } },
+      });
+      if (existingMembership) {
+        throw new BadRequestException(
+          'This person is already a member of the group',
+        );
+      }
+    }
+
+    const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+    const invitation = await this.prisma.invitation.create({
+      data: {
+        groupId,
+        code: generateInviteCode(),
+        email: normalizedEmail,
+        createdBy: userId,
+        expiresAt,
+      },
+    });
+
+    const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
+    const joinLink = `${frontendUrl}/#/invite/${invitation.code}`;
+    await this.mail.sendGroupInviteEmail(
+      normalizedEmail,
+      membership.group.name,
+      joinLink,
+    );
+
+    return { email: normalizedEmail, expiresAt: invitation.expiresAt! };
+  }
+
+  async getInvitationInfo(code: string): Promise<InvitationInfo> {
+    const invitation = await this.prisma.invitation.findUnique({
+      where: { code: code.toUpperCase() },
+      include: { group: true },
+    });
+
+    if (
+      !invitation ||
+      (invitation.expiresAt && invitation.expiresAt < new Date())
+    ) {
+      throw new NotFoundException('Invalid or expired invite code');
+    }
+
+    return {
+      groupId: invitation.groupId,
+      groupName: invitation.group.name,
+      email: invitation.email,
+    };
+  }
+
+  async joinByCode(
+    userId: string,
+    code: string,
+    userEmail: string | null,
+  ): Promise<GroupListItem> {
     const invitation = await this.prisma.invitation.findUnique({
       where: { code: code.toUpperCase() },
       include: {
@@ -199,6 +296,12 @@ export class GroupsService {
       (invitation.expiresAt && invitation.expiresAt < new Date())
     ) {
       throw new NotFoundException('Invalid or expired invite code');
+    }
+
+    if (invitation.email && invitation.email !== userEmail?.toLowerCase()) {
+      throw new ForbiddenException(
+        'This invite was sent to a different email address',
+      );
     }
 
     const existing = await this.prisma.groupMember.findUnique({
