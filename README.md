@@ -25,7 +25,7 @@ npx prisma generate
 | `DATABASE_URL` | Postgres connection string (e.g. from Neon) |
 | `JWT_SECRET` | Signs/verifies access tokens (`openssl rand -hex 32`) |
 | `FRONTEND_URL` | Used to build the link in password-reset emails, and as the allowed CORS origin |
-| `GMAIL_USER` / `GMAIL_APP_PASSWORD` | Sends password-reset emails via Gmail SMTP — a Gmail account with 2FA and an [App Password](https://myaccount.google.com/apppasswords). Leave unset locally to have the reset link logged to the console instead |
+| `BREVO_API_KEY` / `BREVO_FROM_EMAIL` | Sends password-reset emails via [Brevo](https://brevo.com)'s HTTP API (works on Render's free tier, unlike SMTP). `BREVO_FROM_EMAIL` must be a verified sender in Brevo. Leave unset locally to have the reset link logged to the console instead |
 | `BOOTSTRAP_SUPERADMIN_EMAIL` | Used only by `npm run seed:superadmin`, see below |
 
 ### Schema
