@@ -118,7 +118,7 @@ export class AuthService {
     });
 
     const frontendUrl = this.config.getOrThrow<string>('FRONTEND_URL');
-    const link = `${frontendUrl}/auth/reset-password-confirm?token=${token}`;
+    const link = `${frontendUrl}/#/auth/reset-password-confirm?token=${token}`;
     try {
       await this.mail.sendPasswordResetEmail(user.email, link);
     } catch (error) {
